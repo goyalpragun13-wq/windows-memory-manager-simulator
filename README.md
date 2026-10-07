@@ -209,6 +209,8 @@ windows-memory-manager-simulator/
 │   ├── vite.config.js                 # Dev server proxy configuration
 │   └── src/                           # CSS design tokens & JS controllers
 ├── docs/                              # Academic laboratory documentation
+│   ├── PROJECT_REPORT.md              # Formal academic capstone project report
+│   ├── PROJECT_REPORT.html            # Printable university-formatted HTML report
 │   ├── ARCHITECTURE.md                # Subsystem architecture & sequence diagrams
 │   ├── WINDOWS_MEMORY_MANAGEMENT.md   # Theoretical operating systems treatise
 │   ├── LAB_MANUAL.md                  # Student lab exercises & grading rubric

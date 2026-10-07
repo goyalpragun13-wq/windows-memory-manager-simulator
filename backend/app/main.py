@@ -49,6 +49,15 @@ def health_check():
     return {"status": "ok", "service": "Windows Memory Manager Simulator API"}
 
 
+@app.get("/report", tags=["System"], include_in_schema=False)
+def get_project_report():
+    """Serve the academic project report."""
+    report_file = os.path.join(os.path.dirname(__file__), "static", "PROJECT_REPORT.html")
+    if os.path.exists(report_file):
+        return FileResponse(report_file)
+    return {"detail": "Project report file not found"}
+
+
 # Serve built frontend static files if present
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
