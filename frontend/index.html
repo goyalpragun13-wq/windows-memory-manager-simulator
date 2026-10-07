@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Windows Memory Manager (VMM) Simulator | OS Capstone Project</title>
+  <meta name="description" content="University OS Capstone Project: Interactive simulation of the Windows NT/10/11 Virtual Memory Manager, PFN Database, Working Sets, Soft Faults, MMU Address Translation, and Page Replacement Algorithms.">
+  <link rel="stylesheet" href="/src/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+</head>
+<body>
+
+  <!-- Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🪟</div>
+      <div class="brand-title">
+        <h1>Windows Memory Manager Simulator</h1>
+        <p>Operating Systems Capstone • Two-Tier Paging & PFN Database Architecture</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div id="backend-badge" class="badge badge-connected">
+        <span class="badge-pulse"></span> Connecting to Backend...
+      </div>
+      <button class="btn btn-sm" id="btn-open-theory">📖 Theory & Architecture</button>
+      <button class="btn btn-sm" id="btn-open-tests">🧪 Self-Test Suite</button>
+      <button class="btn btn-sm" id="btn-export-trace">💾 Export Trace</button>
+      <button class="btn btn-sm" id="theme-toggle-btn">☀️ Light</button>
+      <a href="https://github.com/goyalpragun13-wq" target="_blank" rel="noopener noreferrer" class="btn btn-sm" style="text-decoration:none;">
+        ⭐ GitHub
+      </a>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Interactive Guided Tour / Tutorial Banner -->
+    <div class="card guide-card" id="guide-card"></div>
+
+    <!-- Section: Memory Access Controls -->
+    <div class="card section-block" id="sec-controls">
+      <div class="card-title">
+        <h2>🎮 Virtual Memory Access & Workload Controls</h2>
+        <span style="font-size:12px; color:var(--text-muted)">4 KB Pages • 16 Physical Frames Total</span>
+      </div>
+
+      <div class="control-bar">
+        <div class="process-tabs">
+          <div class="process-tab active-p1" id="tab-p1" onclick="selectProcess(0)">Process P1</div>
+          <div class="process-tab" id="tab-p2" onclick="selectProcess(1)">Process P2</div>
+          <div class="process-tab" id="tab-p3" onclick="selectProcess(2)">Process P3</div>
+        </div>
+
+        <button class="btn" id="btn-toggle-write">👁️ Read Mode</button>
+        <button class="btn" id="btn-flush" title="Flushes all dirty pages from the Modified list to disk">
+          💾 Run Modified Page Writer
+        </button>
+        <button class="btn" id="btn-zero-step" title="Idle thread converts one free frame to a zeroed frame">
+          🧹 Step Zero-Page Thread
+        </button>
+        <button class="btn" id="btn-auto">▶ Start Auto Workload</button>
+        <button class="btn" id="btn-reset">🔄 Reset System</button>
+      </div>
+
+      <div style="margin: 12px 0 8px 0; font-size: 13px; color: var(--text-muted); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span><b>Virtual Page Access:</b></span>
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:2px; border:2px solid #10b981;"></span> Resident (Active)</span>
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:2px; border:2px solid #eab308;"></span> Standby (Soft Fault)</span>
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:2px; border:2px solid #f43f5e;"></span> Modified (Dirty Soft Fault)</span>
+        <span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:2px; border:1px solid rgba(255,255,255,0.2);"></span> On Disk (Hard Fault)</span>
+      </div>
+
+      <div class="page-buttons" id="page-buttons-container"></div>
+    </div>
+
+    <!-- Section: Physical Memory (PFN Database) -->
+    <div class="card section-block" id="sec-pfn">
+      <div class="card-title">
+        <h2>🧮 Physical Memory Grid (Page Frame Number - PFN Database)</h2>
+        <span style="font-size:12px; color:var(--text-muted)">16 Global Hardware Page Frames (#0 to #15)</span>
+      </div>
+      <div class="pfn-grid" id="pfn-grid"></div>
+    </div>
+
+    <!-- Section: System Frame Lists Queues -->
+    <div class="grid-4 section-block" id="sec-lists" style="margin-bottom:20px;">
+      <div class="queue-card">
+        <div class="queue-title">
+          <span class="queue-dot" style="background:var(--state-free)"></span>
+          <span>Free List</span>
+        </div>
+        <div class="queue-items" id="queue-free"></div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Uninitialized available frames</div>
+      </div>
+
+      <div class="queue-card">
+        <div class="queue-title">
+          <span class="queue-dot" style="background:var(--state-zero)"></span>
+          <span>Zeroed List</span>
+        </div>
+        <div class="queue-items" id="queue-zero"></div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Pre-cleared by Zero-Page Thread</div>
+      </div>
+
+      <div class="queue-card">
+        <div class="queue-title">
+          <span class="queue-dot" style="background:var(--state-stby)"></span>
+          <span>Standby List (Cache)</span>
+        </div>
+        <div class="queue-items" id="queue-stby"></div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Clean trimmed pages (Zero-disk Soft Fault)</div>
+      </div>
+
+      <div class="queue-card">
+        <div class="queue-title">
+          <span class="queue-dot" style="background:var(--state-mod)"></span>
+          <span>Modified List (Dirty)</span>
+        </div>
+        <div class="queue-items" id="queue-mod"></div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Dirty trimmed pages (Must write to pagefile)</div>
+      </div>
+    </div>
+
+    <!-- Section: Process Working Sets -->
+    <div class="card section-block" id="sec-ws">
+      <div class="card-title">
+        <h2>👥 Per-Process Working Sets & Dynamic Quotas</h2>
+        <button class="btn btn-sm" id="btn-kill-proc" title="Simulates process exit and returns all frames to the Free list">
+          🛑 Terminate Active Process
+        </button>
+      </div>
+      <div class="grid-3" id="working-sets-container"></div>
+    </div>
+
+    <!-- Section: Telemetry, Counters & History Chart -->
+    <div class="card section-block" id="sec-stats">
+      <div class="card-title">
+        <h2>📊 Subsystem Telemetry & Performance Counters</h2>
+        <span style="font-size:12px; color:var(--text-muted)">Real-Time Kernel Counters & Fault Metrics</span>
+      </div>
+
+      <!-- Thrashing Alert Banner -->
+      <div id="thrashing-alert" class="thrashing-banner" style="display:none;">
+        ⚠️ <b>Severe Memory Thrashing Detected:</b> Physical memory is fully saturated and the majority of recent memory accesses required synchronous disk reads.
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value" id="stat-accesses">0</div>
+          <div class="stat-label">Total Accesses</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-hits" style="color:#10b981">0</div>
+          <div class="stat-label">Working Set Hits</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-soft" style="color:#eab308">0</div>
+          <div class="stat-label">Soft Faults (Saved I/O)</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-hard" style="color:#f43f5e">0</div>
+          <div class="stat-label">Hard Faults</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-reads">0</div>
+          <div class="stat-label">Disk Reads</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-writes">0</div>
+          <div class="stat-label">Disk Writes</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-fault-rate">0%</div>
+          <div class="stat-label">Fault Rate</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="stat-tlb-rate">0%</div>
+          <div class="stat-label">TLB Hit Rate</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:12px; font-weight:600; color:var(--text-muted);">
+            Performance Trendline (Cumulative: <span style="color:#10b981">Hits</span>, <span style="color:#eab308">Soft Faults</span>, <span style="color:#f43f5e">Hard Faults</span>)
+          </span>
+        </div>
+        <svg id="trend-svg-chart" style="width:100%; height:80px; background:rgba(0,0,0,0.25); border-radius:6px; border:1px solid var(--border-color);"></svg>
+      </div>
+    </div>
+
+    <!-- Section: Event Log -->
+    <div class="card section-block" id="sec-log">
+      <div class="card-title">
+        <h2>📜 Kernel Event Ring Log</h2>
+        <span style="font-size:12px; color:var(--text-muted)">Latest 50 Subsystem State Transitions</span>
+      </div>
+      <div class="event-log" id="event-log-container"></div>
+    </div>
+
+    <!-- Section: MMU & Address Translation -->
+    <div class="grid-2 section-block" id="sec-mmu">
+      <div class="card">
+        <div class="card-title">
+          <h2>🔍 MMU Virtual Address Translation</h2>
+          <span class="badge" style="background:rgba(99,102,241,0.2); color:#818cf8;">4-Entry TLB (LRU)</span>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+          Translates 16-bit Virtual Address to Physical Address. Page size: 4 KB (VPN = Address &gt;&gt; 12, Offset = Address &amp; 0xFFF). Valid range: 0x0000 - 0x9FFF.
+        </p>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <input type="text" id="mmu-va-input" value="0x2A3C" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:rgba(255,255,255,0.05); color:var(--text-main); font-weight:600; width:120px;" placeholder="0x2A3C">
+          <button class="btn btn-primary" id="btn-translate">Translate & Access</button>
+        </div>
+        <div id="mmu-result-box" style="padding:10px 14px; border-radius:8px; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); font-size:13px; min-height:46px; display:flex; align-items:center;">
+          Enter a virtual hex address and click 'Translate & Access'.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <h2>📑 Current Process Architectural Page Table</h2>
+          <span style="font-size:12px; color:var(--text-muted)">10 Virtual Pages</span>
+        </div>
+        <div id="page-table-container" style="max-height:220px; overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- Section: Educational Scenarios -->
+    <div class="card section-block" id="sec-scenarios">
+      <div class="card-title">
+        <h2>🔬 Pre-Configured Benchmark Scenarios</h2>
+        <span style="font-size:12px; color:var(--text-muted)">One-Click Workload Replay & Verifications</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn" onclick="runScenario(1)" id="btn-scen-1">1. Good Locality (80/20 Rule)</button>
+        <button class="btn" onclick="runScenario(2)" id="btn-scen-2">2. Working Set Thrashing</button>
+        <button class="btn" onclick="runScenario(3)" id="btn-scen-3">3. Sequential Scan (Cache Flushing)</button>
+        <button class="btn" onclick="runScenario(4)" id="btn-scen-4">4. Severe Memory Pressure</button>
+        <button class="btn" onclick="runScenario(5)" id="btn-scen-5">5. Write-Heavy Stress</button>
+        <button class="btn" onclick="runScenario(6)" id="btn-scen-6">6. Process Exit & Frame Reclaim</button>
+      </div>
+    </div>
+
+    <!-- Section: Paging Comparison -->
+    <div class="card section-block" id="sec-benchmark">
+      <div class="card-title">
+        <h2>⚖️ Architecture Benchmark: Windows Model vs Global Paging</h2>
+        <span style="font-size:12px; color:var(--text-muted)">Replays current session trace across traditional textbook architectures</span>
+      </div>
+      <div id="baseline-compare-container"></div>
+    </div>
+
+    <!-- Section: Experiment Lab -->
+    <div class="card section-block" id="sec-lab">
+      <div class="card-title">
+        <h2>🧪 Experiment Lab: Page Replacement Algorithms & Belady's Anomaly</h2>
+        <span style="font-size:12px; color:var(--text-muted)">Empirical sweep across 1 to 10 physical frames</span>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+        <select id="lab-workload-select" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:rgba(255,255,255,0.05); color:var(--text-main);">
+          <option value="bel">Belady String: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5</option>
+          <option value="loc">Temporal Locality (Seeded Random 200 Accesses)</option>
+          <option value="loop">Loop Pattern (10-Page Loop, 100 Accesses)</option>
+          <option value="rnd">Uniform Random (200 Accesses)</option>
+          <option value="ses">Current Simulator Session Trace</option>
+          <option value="cus">Custom Reference String</option>
+        </select>
+        <input type="text" id="lab-custom-input" placeholder="7 0 1 2 0 3 0 4 2 3 0 3 2" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border-color); background:rgba(255,255,255,0.05); color:var(--text-main); flex:1; min-width:200px;">
+        <button class="btn btn-primary" id="btn-run-lab">Run Lab Experiment</button>
+      </div>
+
+      <div id="lab-anomaly-box" class="thrashing-banner" style="display:none; background:rgba(234,179,8,0.15); border-color:#eab308; color:#fde047;"></div>
+
+      <div id="lab-results-box" style="margin-bottom:16px;"></div>
+
+      <div style="text-align:center;">
+        <span style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">
+          Page Faults vs Physical Frame Count (1 - 10 Frames)
+        </span>
+        <svg id="lab-svg-chart" style="width:100%; height:180px; background:rgba(0,0,0,0.25); border-radius:6px; border:1px solid var(--border-color);"></svg>
+      </div>
+    </div>
+
+  </div> <!-- /container -->
+
+  <!-- Modal: Theory & Architecture -->
+  <div class="modal-overlay" id="modal-theory" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📖 Windows Virtual Memory Manager (VMM) Architecture</h2>
+        <button class="close-btn" id="btn-close-theory">&times;</button>
+      </div>
+      <div style="font-size:13px; line-height:1.6; color:var(--text-muted);">
+        <h3 style="color:var(--text-main); margin:12px 0 6px 0;">1. Two-Tier Paging Subsystem</h3>
+        <p>Unlike simplistic textbook page replacement algorithms that operate on a single monolithic global frame pool, the Windows NT/10/11 Virtual Memory Manager separates memory management into two distinct layers:
+        <b>Process Working Sets</b> and the <b>Global Page Frame Number (PFN) Database</b>.</p>
+        
+        <h3 style="color:var(--text-main); margin:12px 0 6px 0;">2. The PFN Database State Machine</h3>
+        <p>Every physical frame in RAM is represented by an entry in the kernel PFN database and resides in one of the following states:</p>
+        <ul style="padding-left:20px; margin:6px 0;">
+          <li><b>Active (Valid):</b> Mapped in a process's hardware page table (PTE Valid bit = 1).</li>
+          <li><b>Standby List:</b> Clean pages trimmed from working sets. Still hold process virtual data and pagefile mapping. Can be reclaimed via zero-disk-I/O <b>Soft Faults</b>.</li>
+          <li><b>Modified List:</b> Dirty pages trimmed from working sets. Must be written to disk before reuse. Can also be soft-faulted prior to pagefile flush!</li>
+          <li><b>Free List:</b> Physical frames with uninitialized contents available for new allocations.</li>
+          <li><b>Zeroed List:</b> Frames pre-cleared by the idle-priority Zero-Page Thread for zero-fill demand paging (preventing inter-process data leakage).</li>
+        </ul>
+
+        <h3 style="color:var(--text-main); margin:12px 0 6px 0;">3. Working Set Trimming & Soft Page Faults</h3>
+        <p>When a process exceeds its Working Set quota or the system detects memory pressure, the Working Set Manager trims the least recently used pages.
+        Clean pages move to the Standby list; dirty pages move to the Modified list. If the process touches that page again before it is overwritten, a <b>Soft Fault</b> occurs, re-linking the frame with zero disk access.</p>
+
+        <h3 style="color:var(--text-main); margin:12px 0 6px 0;">4. Replacement Algorithms & Belady's Anomaly</h3>
+        <p>The experiment lab implements FIFO, LRU, Clock (Second Chance), and Optimal (MIN). Belady's Anomaly occurs when increasing physical frames causes an increase in page faults under FIFO, demonstrating why stack algorithms (like LRU) and working-set caching are preferred in production operating systems.</p>
+
+        <h3 style="color:var(--text-main); margin:12px 0 6px 0;">5. References</h3>
+        <ul style="padding-left:20px; margin:6px 0;">
+          <li>Russinovich, M., Solomon, D., & Ionescu, A. <i>Windows Internals, Part 1</i>, 7th Edition. Microsoft Press.</li>
+          <li>Silberschatz, A., Galvin, P. B., & Gagne, G. <i>Operating System Concepts</i>, 10th Edition. Wiley.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Self-Test Suite -->
+  <div class="modal-overlay" id="modal-tests" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🧪 Automated Verification Test Suite</h2>
+        <button class="close-btn" id="btn-close-tests">&times;</button>
+      </div>
+      <div style="margin-bottom:12px;">
+        <button class="btn btn-primary btn-sm" id="btn-run-tests">Re-run All Verification Tests</button>
+      </div>
+      <div id="test-results-container"></div>
+    </div>
+  </div>
+
+  <script src="/src/main.js"></script>
+</body>
+</html>

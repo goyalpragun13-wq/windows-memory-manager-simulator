@@ -1,0 +1,13 @@
+{
+  "name": "windows-memory-manager-simulator",
+  "version": "2.0.0",
+  "description": "Interactive Windows Virtual Memory Manager Simulator & Experiment Lab",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}
